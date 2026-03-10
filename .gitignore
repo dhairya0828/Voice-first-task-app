@@ -1,0 +1,8 @@
+__pycache__/
+.pycache/
+.pytest_cache/
+.venv/
+.env
+voice_tasks.db
+*.sqlite3
+.DS_Store
