@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ app_name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <header class="page-header">
+        <p class="eyebrow">Voice-First Productivity</p>
+        <h1>{{ app_name }}</h1>
+        <p class="hero-copy">Speak naturally, execute tasks faster, and track operational discipline through real-time analytics.</p>
+    </header>
+
+    <main class="container">
+        <section id="auth-section" class="card reveal">
+            <h2>Authentication</h2>
+            <div class="auth-grid">
+                <form id="register-form" class="panel">
+                    <h3>Create account</h3>
+                    <label>Email
+                        <input id="register-email" type="email" required />
+                    </label>
+                    <label>Full name
+                        <input id="register-full-name" type="text" placeholder="Optional" />
+                    </label>
+                    <label>Password
+                        <input id="register-password" type="password" minlength="6" required />
+                    </label>
+                    <button type="submit">Register</button>
+                </form>
+
+                <form id="login-form" class="panel">
+                    <h3>Sign in</h3>
+                    <label>Email
+                        <input id="login-email" type="email" required />
+                    </label>
+                    <label>Password
+                        <input id="login-password" type="password" required />
+                    </label>
+                    <button type="submit" class="primary">Login</button>
+                </form>
+            </div>
+            <p id="auth-status" class="status"></p>
+        </section>
+
+        <section id="app-section" class="hidden app-shell">
+            <div class="top-bar card reveal">
+                <div>
+                    <strong id="current-user"></strong>
+                    <p class="muted">Voice capture, manual controls, and analytics in one workflow.</p>
+                </div>
+                <button id="logout-btn" class="danger">Logout</button>
+            </div>
+
+            <div class="two-col">
+                <section id="voice-card" class="card reveal">
+                    <h2>Voice Command</h2>
+                    <p class="muted">Examples: "Remind me to submit the quarterly report by next Friday" or "Delay sprint retro by 2 days".</p>
+                    <label>Voice transcript / command text
+                        <textarea id="voice-input" rows="4" placeholder="Speak or type your command here..."></textarea>
+                    </label>
+                    <div class="button-row">
+                        <button id="start-mic-btn" type="button">Start Mic</button>
+                        <button id="stop-mic-btn" type="button">Stop Mic</button>
+                        <button id="interpret-btn" type="button">Interpret</button>
+                        <button id="execute-btn" type="button" class="primary">Execute</button>
+                    </div>
+                    <p id="voice-status" class="status"></p>
+                    <pre id="interpretation-output" class="json-box"></pre>
+                </section>
+
+                <section class="card reveal">
+                    <h2>Create Task Manually</h2>
+                    <form id="task-form" class="panel">
+                        <label>Title
+                            <input id="task-title" type="text" maxlength="180" required />
+                        </label>
+                        <label>Description
+                            <textarea id="task-description" rows="3" placeholder="Optional"></textarea>
+                        </label>
+                        <label>Due date
+                            <input id="task-due-date" type="datetime-local" />
+                        </label>
+                        <button type="submit" class="primary">Create Task</button>
+                    </form>
+                </section>
+            </div>
+
+            <section class="card reveal">
+                <div class="section-header">
+                    <h2>Tasks</h2>
+                    <label>Filter
+                        <select id="task-status-filter">
+                            <option value="">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Due Date (UTC)</th>
+                                <th>Status</th>
+                                <th>Delayed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasks-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card reveal">
+                <h2>Analytics Dashboard</h2>
+                <div class="kpi-grid">
+                    <div class="kpi">
+                        <span>Pending</span>
+                        <strong id="kpi-pending">0</strong>
+                    </div>
+                    <div class="kpi">
+                        <span>Completed On Time</span>
+                        <strong id="kpi-on-time">0</strong>
+                    </div>
+                    <div class="kpi">
+                        <span>Completed Late</span>
+                        <strong id="kpi-late">0</strong>
+                    </div>
+                    <div class="kpi">
+                        <span>Delayed</span>
+                        <strong id="kpi-delayed">0</strong>
+                    </div>
+                    <div class="kpi">
+                        <span>Cancelled</span>
+                        <strong id="kpi-cancelled">0</strong>
+                    </div>
+                </div>
+
+                <div class="chart-grid">
+                    <div class="chart-panel">
+                        <h3>Status Distribution</h3>
+                        <canvas id="status-chart" width="520" height="220"></canvas>
+                    </div>
+                    <div class="chart-panel">
+                        <h3>Completion Trend (Last 14 Days)</h3>
+                        <canvas id="trend-chart" width="520" height="220"></canvas>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
