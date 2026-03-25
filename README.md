@@ -1,172 +1,137 @@
 # Voice-First Task App (FastAPI)
 
-A complete implementation of **Voice-First Task App** with:
-- Voice command interpretation from natural language
-- Task lifecycle actions (create, complete, cancel, delay)
-- User authentication
-- Analytics dashboard with visual graphs
+Voice-driven task manager with authentication, full task lifecycle controls, and an analytics dashboard.
 
-## Requirement Mapping
+## Features
 
-### 1) Voice input with structured task extraction
-Implemented via:
-- Browser mic capture (`Web Speech API`) in the frontend
-- Backend NLP parser (`app/services/voice_parser.py`) extracting:
-  - `title`
-  - `description`
-  - `due_date`
-  - command `action`
-
-### 2) Task actions
-Supported actions:
-- `create`
-- `complete`
-- `cancel`
-- `delay`
-
-You can do these by voice (`/api/voice/execute`) or manually from the UI.
-
-### 3) Authentication
-Implemented with:
-- Register: `POST /api/auth/register`
-- Login: `POST /api/auth/login` (JWT)
-- Profile: `GET /api/auth/me`
-
-### 4) Analytics dashboard with graphs
-Implemented in UI + API:
-- `Tasks completed on time`
-- `Tasks currently pending`
-- `Tasks that were delayed`
-- Extra KPIs: completed late, cancelled
-- Visual graphs:
-  - Status distribution bar chart
-  - Completion trend line chart (last 14 days)
-
-## Cherry-On-Top Features Included
-
-- Ambiguity handling with confidence score and warnings before execution
-- Voice action automation (`complete/cancel/delay`) with fuzzy task matching
-- Task event history model (`task_events`) for auditability
-- Manual fallback UI (important when mic/browser support is unavailable)
+- Voice command interpretation into structured actions (`create`, `complete`, `cancel`, `delay`)
+- Manual task creation/edit actions as fallback
+- JWT-based authentication
+- Analytics dashboard:
+  - tasks completed on time
+  - tasks pending
+  - tasks delayed
+  - status distribution and completion trend graphs
+- Ambiguity handling with confidence score + warnings before execute
 
 ## Tech Stack
 
-- Backend: `FastAPI`, `SQLAlchemy`, `SQLite`, `JWT`
-- Frontend: Server-rendered HTML + Vanilla JS + Canvas charts
-- NLP/date extraction: `dateparser`
+- Backend: FastAPI, SQLAlchemy, JWT, dateparser
+- Frontend: HTML/CSS/Vanilla JS + Canvas charts
+- Database:
+  - Local: SQLite
+  - Production: Postgres (Neon/Supabase compatible)
 
-## Project Structure
+## Run Locally
 
-```text
-voice_task_app/
-  app/
-    main.py
-    config.py
-    database.py
-    models.py
-    schemas.py
-    security.py
-    dependencies.py
-    routers/
-      auth.py
-      tasks.py
-      voice.py
-      analytics.py
-    services/
-      auth.py
-      task_service.py
-      voice_parser.py
-      analytics.py
-    static/
-      app.js
-      styles.css
-    templates/
-      index.html
-  tests/
-    test_voice_parser.py
-  requirements.txt
-  .env.example
-```
+### 1) Prerequisites
 
-## How To Run (Beginner-Friendly)
-
-Run these commands from terminal.
-
-### 0) Prerequisites
-- Python `3.9+`
+- Python 3.10+ recommended
 - `pip`
 
-### 1) Open project folder
-```bash
-cd /path/voice_task_app
-```
+### 2) Setup
 
-### 2) Create virtual environment
 ```bash
+cd voice_task_app
 python3 -m venv .venv
-```
-
-### 3) Activate virtual environment
-macOS/Linux:
-```bash
 source .venv/bin/activate
-```
-
-Windows (PowerShell):
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-### 4) Install dependencies
-```bash
 pip install -r requirements.txt
-```
-
-### 5) Create `.env`
-```bash
 cp .env.example .env
 ```
 
-Then edit `.env` and set a strong `SECRET_KEY`.
+Edit `.env` and set a strong `SECRET_KEY`.
 
-### 6) Start the app
+### 3) Start app
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### 7) Open in browser
-Go to:
-- [http://127.0.0.1:8000](http://127.0.0.1:8000)
+Open: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
-## First Demo Flow
+### 4) Run tests
 
-1. Register a user.
-2. Login.
-3. Use voice command:
-   - `Remind me to submit the quarterly report by next Friday`
-4. Click **Interpret** (review confidence/warnings).
-5. Click **Execute**.
-6. Complete/cancel/delay tasks and watch dashboard update.
-
-## Testing
-
-Run parser tests:
 ```bash
 PYTHONPATH=. pytest
 ```
 
-## Important Notes
+## Deployment (Public) - Netlify + Render + Neon
+
+Use this architecture:
+
+- Netlify: frontend hosting
+- Render: FastAPI backend hosting
+- Neon: free hosted Postgres
+
+### Step A: Create free Postgres (Neon)
+
+1. Create a Neon project and database.
+2. Copy connection string.
+3. Convert it to SQLAlchemy `psycopg` format:
+
+```text
+postgresql+psycopg://USER:PASSWORD@HOST/DBNAME?sslmode=require
+```
+
+### Step B: Deploy backend (Render)
+
+1. Create a new **Web Service** from this repo.
+2. Configure:
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+3. Add environment variables:
+   - `APP_NAME=Voice-First Task App`
+   - `SECRET_KEY=<strong-random-value>`
+   - `ACCESS_TOKEN_EXPIRE_MINUTES=120`
+   - `DATABASE_URL=<your-postgresql+psycopg URL>`
+   - `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
+4. Deploy and confirm health:
+   - `https://<your-render-service>.onrender.com/health`
+
+### Step C: Deploy frontend (Netlify)
+
+This repo includes:
+
+- `netlify.toml` (build + publish settings)
+- `scripts/build_netlify.sh` (generates static site into `netlify_site/`)
+
+In Netlify:
+
+1. Import the GitHub repo.
+2. Set environment variable:
+   - `NETLIFY_API_BASE_URL=https://<your-render-service>.onrender.com`
+3. Deploy (Netlify reads `netlify.toml` automatically).
+
+Optional:
+
+- `NETLIFY_APP_NAME=Voice-First Task App`
+
+### Step D: Smoke test deployed app
+
+1. Open Netlify URL.
+2. Register and login.
+3. Create task by voice command.
+4. Execute complete/cancel/delay.
+5. Verify dashboard updates.
+
+## Environment Variables
+
+Local `.env` example:
+
+```env
+APP_NAME="Voice-First Task App"
+SECRET_KEY="replace-this"
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+DATABASE_URL="sqlite:///./voice_tasks.db"
+CORS_ORIGINS="*"
+```
+
+Production recommendation:
+
+- Set specific CORS origins (Netlify domain), not `*`.
+
+## Useful Notes
 
 - Due dates are stored in UTC.
-- If browser mic is unsupported, type command text manually in the voice box.
-- Fuzzy matching is used for voice actions like complete/cancel/delay.
-
-## Submission Checklist
-
-- Ensure `.env` exists and app starts with `uvicorn app.main:app --reload`.
-- Run tests with `PYTHONPATH=. pytest`.
-- Include only project files in the final branch.
-- Share:
-  - Branch name
-  - Repository URL
-  - Run steps from this README
+- If mic is unavailable, typed command input still works.
+- Frontend API base URL is configurable via `window.APP_CONFIG.API_BASE_URL`.
