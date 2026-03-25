@@ -73,6 +73,47 @@ def create_task(
     return task
 
 
+def find_recent_duplicate_task(
+    db: Session,
+    user_id: int,
+    title: str,
+    due_date: Optional[datetime],
+    within_minutes: int = 8,
+) -> Optional[Task]:
+    normalized_title = _normalize_text(title)
+    if not normalized_title:
+        return None
+
+    normalized_due_date = _normalize_datetime(due_date)
+    window_start = _utc_now() - timedelta(minutes=within_minutes)
+
+    recent_tasks = (
+        db.query(Task)
+        .filter(Task.user_id == user_id, Task.created_at >= window_start, Task.status == TaskStatus.PENDING)
+        .order_by(Task.created_at.desc())
+        .all()
+    )
+
+    for task in recent_tasks:
+        existing_title = _normalize_text(task.title)
+        if not existing_title:
+            continue
+
+        similarity = SequenceMatcher(None, normalized_title, existing_title).ratio()
+        if similarity < 0.92:
+            continue
+
+        if normalized_due_date is None and task.due_date is None:
+            return task
+
+        if normalized_due_date is not None and task.due_date is not None:
+            delta_seconds = abs((task.due_date - normalized_due_date).total_seconds())
+            if delta_seconds <= 300:
+                return task
+
+    return None
+
+
 def get_task_for_user(db: Session, user_id: int, task_id: int) -> Task:
     task = db.query(Task).filter(Task.user_id == user_id, Task.id == task_id).first()
     if not task:

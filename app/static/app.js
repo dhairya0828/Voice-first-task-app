@@ -20,6 +20,11 @@ const elements = {
     stopMicBtn: document.getElementById("stop-mic-btn"),
 };
 
+const API_BASE_URL = (() => {
+    const raw = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || "";
+    return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+})();
+
 function setStatus(node, message, type = "") {
     node.textContent = message || "";
     node.className = `status ${type}`.trim();
@@ -50,7 +55,8 @@ async function api(path, { method = "GET", body = null, form = false } = {}) {
         }
     }
 
-    const response = await fetch(path, { method, headers, body: payload });
+    const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+    const response = await fetch(url, { method, headers, body: payload });
     let data = {};
 
     try {
@@ -84,39 +90,72 @@ function formatUtc(value) {
     return dt.toISOString().replace("T", " ").slice(0, 16);
 }
 
+function createTaskActionButton(action, taskId, label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.action = action;
+    button.dataset.id = String(taskId);
+    button.textContent = label;
+    return button;
+}
+
 function renderTasks(tasks) {
+    elements.tasksBody.textContent = "";
+
     if (!tasks.length) {
-        elements.tasksBody.innerHTML = `<tr><td colspan="5">No tasks found.</td></tr>`;
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = "No tasks found.";
+        row.appendChild(cell);
+        elements.tasksBody.appendChild(row);
         return;
     }
 
-    elements.tasksBody.innerHTML = tasks
-        .map((task) => {
-            const actions =
-                task.status === "pending"
-                    ? `
-                    <div class="action-row">
-                        <button data-action="complete" data-id="${task.id}">Complete</button>
-                        <button data-action="cancel" data-id="${task.id}">Cancel</button>
-                        <button data-action="delay" data-id="${task.id}">Delay</button>
-                    </div>
-                `
-                    : "-";
+    tasks.forEach((task) => {
+        const row = document.createElement("tr");
 
-            return `
-                <tr>
-                    <td>
-                        <strong>${task.title}</strong>
-                        <div class="muted">${task.description || ""}</div>
-                    </td>
-                    <td>${formatUtc(task.due_date)}</td>
-                    <td><span class="badge ${task.status}">${task.status}</span></td>
-                    <td>${task.delayed_count}</td>
-                    <td>${actions}</td>
-                </tr>
-            `;
-        })
-        .join("");
+        const titleCell = document.createElement("td");
+        const strong = document.createElement("strong");
+        strong.textContent = task.title;
+        titleCell.appendChild(strong);
+        const desc = document.createElement("div");
+        desc.className = "muted";
+        desc.textContent = task.description || "";
+        titleCell.appendChild(desc);
+
+        const dueCell = document.createElement("td");
+        dueCell.textContent = formatUtc(task.due_date);
+
+        const statusCell = document.createElement("td");
+        const statusBadge = document.createElement("span");
+        statusBadge.className = `badge ${task.status}`;
+        statusBadge.textContent = task.status;
+        statusCell.appendChild(statusBadge);
+
+        const delayCell = document.createElement("td");
+        delayCell.textContent = String(task.delayed_count);
+
+        const actionCell = document.createElement("td");
+        if (task.status === "pending") {
+            const actionRow = document.createElement("div");
+            actionRow.className = "action-row";
+            actionRow.appendChild(createTaskActionButton("complete", task.id, "Complete"));
+            actionRow.appendChild(createTaskActionButton("cancel", task.id, "Cancel"));
+            actionRow.appendChild(createTaskActionButton("delay", task.id, "Delay"));
+            actionCell.appendChild(actionRow);
+        } else {
+            actionCell.textContent = "-";
+        }
+
+        row.appendChild(titleCell);
+        row.appendChild(dueCell);
+        row.appendChild(statusCell);
+        row.appendChild(delayCell);
+        row.appendChild(actionCell);
+
+        elements.tasksBody.appendChild(row);
+    });
 }
 
 function drawStatusChart(statusDistribution) {
@@ -450,7 +489,20 @@ async function onExecute() {
     }
 
     try {
-        const result = await api("/api/voice/execute", { method: "POST", body: { text } });
+        let result = await api("/api/voice/execute", { method: "POST", body: { text, force: false } });
+
+        if (result.requires_confirmation) {
+            const reason = result.confirmation_reason || "This command looks ambiguous.";
+            const confirmed = window.confirm(`${reason}\n\nPress OK to continue anyway.`);
+            if (!confirmed) {
+                elements.interpretationOutput.textContent = JSON.stringify(result.interpretation, null, 2);
+                setStatus(elements.voiceStatus, "Execution cancelled. You can edit the command and try again.");
+                return;
+            }
+
+            result = await api("/api/voice/execute", { method: "POST", body: { text, force: true } });
+        }
+
         elements.interpretationOutput.textContent = JSON.stringify(result.interpretation, null, 2);
         setStatus(elements.voiceStatus, result.message, "success");
         await refreshAll();

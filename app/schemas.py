@@ -66,6 +66,10 @@ class VoiceInterpretRequest(BaseModel):
     text: str = Field(min_length=2, max_length=800)
 
 
+class VoiceExecuteRequest(VoiceInterpretRequest):
+    force: bool = False
+
+
 class VoiceInterpretation(BaseModel):
     original_text: str
     normalized_text: str
@@ -88,6 +92,8 @@ class VoiceExecuteResponse(BaseModel):
     message: str
     interpretation: VoiceInterpretation
     task: Optional[TaskResponse] = None
+    requires_confirmation: bool = False
+    confirmation_reason: Optional[str] = None
 
 
 class AnalyticsSummary(BaseModel):
