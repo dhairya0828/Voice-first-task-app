@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 120
     database_url: str = "sqlite:///./voice_tasks.db"
     cors_origins: str = "*"
+    serve_frontend: bool = True
 
     @property
     def cors_origin_list(self) -> list[str]:

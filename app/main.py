@@ -25,18 +25,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
 
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("index.html", {"request": request, "app_name": settings.app_name})
+if settings.serve_frontend:
+    app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+    templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+    @app.get("/", response_class=HTMLResponse)
+    def home(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse("index.html", {"request": request, "app_name": settings.app_name})
+else:
+    @app.get("/")
+    def home() -> dict[str, str]:
+        return {"message": "Voice API is running", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/health")

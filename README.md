@@ -85,6 +85,7 @@ postgresql+psycopg://USER:PASSWORD@HOST/DBNAME?sslmode=require
    - `ACCESS_TOKEN_EXPIRE_MINUTES=120`
    - `DATABASE_URL=<your-postgresql+psycopg URL>`
    - `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
+   - `SERVE_FRONTEND=false` (use Netlify as UI)
 4. Deploy and confirm health:
    - `https://<your-render-service>.onrender.com/health`
 
@@ -124,6 +125,7 @@ SECRET_KEY="replace-this"
 ACCESS_TOKEN_EXPIRE_MINUTES=120
 DATABASE_URL="sqlite:///./voice_tasks.db"
 CORS_ORIGINS="*"
+SERVE_FRONTEND=true
 ```
 
 Production recommendation:
@@ -135,3 +137,4 @@ Production recommendation:
 - Due dates are stored in UTC.
 - If mic is unavailable, typed command input still works.
 - Frontend API base URL is configurable via `window.APP_CONFIG.API_BASE_URL`.
+- `SERVE_FRONTEND=false` disables the embedded frontend on Render root (`/`) and keeps API endpoints active.
