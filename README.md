@@ -55,65 +55,115 @@ Open: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 PYTHONPATH=. pytest
 ```
 
-## Deployment (Public) - Netlify + Render + Neon
+## Deployment (Public) - Recommended: Netlify + Oracle Cloud VM + Supabase/Neon
 
 Use this architecture:
 
 - Netlify: frontend hosting
-- Render: FastAPI backend hosting
-- Neon: free hosted Postgres
+- Oracle Cloud VM (Always Free): backend hosting (no sleep)
+- Supabase/Neon: managed Postgres
 
-### Step A: Create free Postgres (Neon)
+### Files added for Oracle deployment
 
-1. Create a Neon project and database.
-2. Copy connection string.
-3. Convert it to SQLAlchemy `psycopg` format:
+- `Dockerfile`
+- `deployment/oracle/docker-compose.yml`
+- `deployment/oracle/Caddyfile`
+- `deployment/oracle/.env.oracle.example`
+- `scripts/oracle/deploy.sh`
+
+### Step A: Prepare database
+
+Create Postgres on Supabase or Neon and keep a SQLAlchemy URL:
 
 ```text
-postgresql+psycopg://USER:PASSWORD@HOST/DBNAME?sslmode=require
+postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 ```
 
-### Step B: Deploy backend (Render)
+### Step B: Prepare Oracle VM
 
-1. Create a new **Web Service** from this repo.
-2. Configure:
-   - Build command: `pip install -r requirements.txt`
-   - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-3. Add environment variables:
-   - `APP_NAME=Voice-First Task App`
-   - `SECRET_KEY=<strong-random-value>`
-   - `ACCESS_TOKEN_EXPIRE_MINUTES=120`
-   - `DATABASE_URL=<your-postgresql+psycopg URL>`
-   - `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
-   - `SERVE_FRONTEND=false` (use Netlify as UI)
-4. Deploy and confirm health:
-   - `https://<your-render-service>.onrender.com/health`
+1. Create an Ubuntu VM in Oracle Cloud (Always Free shape).
+2. Open inbound ports in Oracle security rules:
+   - `22` (SSH)
+   - `80` (HTTP)
+   - `443` (HTTPS)
+3. Point a domain/subdomain (example `api.yourdomain.com`) to VM public IP with an `A` record.
 
-### Step C: Deploy frontend (Netlify)
+### Step C: Install Docker on Oracle VM
 
-This repo includes:
+SSH into VM and run:
 
-- `netlify.toml` (build + publish settings)
-- `scripts/build_netlify.sh` (generates static site into `netlify_site/`)
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+```
 
-In Netlify:
+Log out and SSH again so docker group applies.
 
-1. Import the GitHub repo.
-2. Set environment variable:
-   - `NETLIFY_API_BASE_URL=https://<your-render-service>.onrender.com`
-3. Deploy (Netlify reads `netlify.toml` automatically).
+### Step D: Deploy backend containers
 
-Optional:
+```bash
+git clone <your-repo-url>
+cd voice_task_app
+cp deployment/oracle/.env.oracle.example deployment/oracle/.env.oracle
+```
 
-- `NETLIFY_APP_NAME=Voice-First Task App`
+Edit `deployment/oracle/.env.oracle`:
 
-### Step D: Smoke test deployed app
+- `API_DOMAIN=api.yourdomain.com`
+- `SECRET_KEY=<strong-random-value>`
+- `DATABASE_URL=<your-postgresql+psycopg-url>`
+- `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
+- `SERVE_FRONTEND=false`
+
+Deploy:
+
+```bash
+bash scripts/oracle/deploy.sh
+```
+
+Verify:
+
+- `https://api.yourdomain.com/health` returns `{"status":"ok"}`
+
+### Step E: Configure Netlify frontend
+
+This repo includes Netlify build setup:
+
+- `netlify.toml`
+- `scripts/build_netlify.sh`
+
+In Netlify set:
+
+- `NETLIFY_API_BASE_URL=https://api.yourdomain.com`
+- optional: `NETLIFY_APP_NAME=Voice-First Task App`
+
+Then redeploy Netlify.
+
+### Step F: Smoke test
 
 1. Open Netlify URL.
 2. Register and login.
-3. Create task by voice command.
-4. Execute complete/cancel/delay.
-5. Verify dashboard updates.
+3. Create and complete tasks by voice.
+4. Verify analytics updates.
+
+## Alternate Deployment - Netlify + Render
+
+Render is simpler but free tier can cold-start/sleep.
+
+Backend settings:
+
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
+- `SERVE_FRONTEND=false`
 
 ## Environment Variables
 
