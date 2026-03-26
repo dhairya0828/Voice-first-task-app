@@ -9,7 +9,7 @@ from dateparser.search import search_dates
 from app.schemas import VoiceInterpretation
 
 ACTION_PATTERNS = {
-    "complete": re.compile(r"\b(complete|completed|done|finish|finished)\b", re.IGNORECASE),
+    "complete": re.compile(r"\b(complete|completed|done|finish|finished|published|submitted|shipped|delivered)\b", re.IGNORECASE),
     "cancel": re.compile(r"\b(cancel|cancelled|canceled|drop|delete)\b", re.IGNORECASE),
     "delay": re.compile(r"\b(delay|postpone|push|reschedule|snooze)\b", re.IGNORECASE),
 }
@@ -25,6 +25,10 @@ LEADING_CREATE_PHRASES = [
 ]
 
 DELAY_AMOUNT_PATTERN = re.compile(r"\b(\d+)\s*(day|days|d|week|weeks|w|hour|hours|h)\b", re.IGNORECASE)
+TIME_TOKEN_PATTERN = re.compile(
+    r"\b(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}|noon|midnight|morning|afternoon|evening|night|tonight)\b",
+    re.IGNORECASE,
+)
 
 
 def _normalize_text(text: str) -> str:
@@ -60,6 +64,9 @@ def _parse_datetime(text: str, relative_base: datetime) -> Tuple[Optional[dateti
         else:
             dt = dt.astimezone(timezone.utc)
 
+        if snippet and not TIME_TOKEN_PATTERN.search(snippet):
+            dt = dt.replace(hour=23, minute=59, second=0, microsecond=0)
+
         if dt >= relative_base:
             return dt.replace(microsecond=0), snippet
 
@@ -68,6 +75,8 @@ def _parse_datetime(text: str, relative_base: datetime) -> Tuple[Optional[dateti
         dt = dt.replace(tzinfo=timezone.utc)
     else:
         dt = dt.astimezone(timezone.utc)
+    if snippet and not TIME_TOKEN_PATTERN.search(snippet):
+        dt = dt.replace(hour=23, minute=59, second=0, microsecond=0)
     return dt.replace(microsecond=0), snippet
 
 
@@ -97,9 +106,15 @@ def _extract_create_title(normalized: str, date_snippet: Optional[str]) -> str:
 
 def _extract_query_for_action(action: str, normalized: str) -> str:
     query = normalized
+    query = query.replace("i've", "i have").replace("we've", "we have")
 
     if action == "complete":
-        query = re.sub(r"\b(please|mark|set|task|as|complete|completed|done|finish|finished)\b", " ", query, flags=re.IGNORECASE)
+        query = re.sub(
+            r"\b(please|mark|set|task|as|complete|completed|done|finish|finished|published|submitted|shipped|delivered|i|we|have|just|already)\b",
+            " ",
+            query,
+            flags=re.IGNORECASE,
+        )
     elif action == "cancel":
         query = re.sub(r"\b(please|cancel|cancelled|canceled|drop|delete|task)\b", " ", query, flags=re.IGNORECASE)
     elif action == "delay":

@@ -27,3 +27,21 @@ def test_delay_command_extracts_days() -> None:
     assert interpretation.action == "delay"
     assert interpretation.delay_days == 2
     assert interpretation.task_query is not None
+
+
+def test_published_phrase_maps_to_complete_action() -> None:
+    interpretation = interpret_voice_command("I have published website")
+
+    assert interpretation.action == "complete"
+    assert interpretation.task_query is not None
+    assert interpretation.task_query.lower() == "website"
+
+
+def test_today_defaults_due_time_to_end_of_day() -> None:
+    now = datetime(2026, 3, 26, 10, 15, tzinfo=timezone.utc)
+    interpretation = interpret_voice_command("Remind me to publish website today", now=now)
+
+    assert interpretation.action == "create"
+    assert interpretation.extracted_due_date is not None
+    assert interpretation.extracted_due_date.hour == 23
+    assert interpretation.extracted_due_date.minute == 59

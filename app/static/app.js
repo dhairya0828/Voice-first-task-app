@@ -3,6 +3,9 @@ const state = {
     currentUser: null,
     recognition: null,
     isListening: false,
+    shouldKeepListening: false,
+    manualStopRequested: false,
+    resumeTimer: null,
     finalTranscript: "",
 };
 
@@ -32,9 +35,10 @@ function setStatus(node, message, type = "") {
 
 function updateMicControls() {
     if (!elements.startMicBtn || !elements.stopMicBtn) return;
-    elements.startMicBtn.disabled = state.isListening;
-    elements.stopMicBtn.disabled = !state.isListening;
-    elements.startMicBtn.setAttribute("aria-pressed", state.isListening ? "true" : "false");
+    const active = state.isListening || state.shouldKeepListening;
+    elements.startMicBtn.disabled = active;
+    elements.stopMicBtn.disabled = !active;
+    elements.startMicBtn.setAttribute("aria-pressed", active ? "true" : "false");
 }
 
 async function api(path, { method = "GET", body = null, form = false } = {}) {
@@ -257,8 +261,7 @@ async function refreshAnalytics() {
 }
 
 async function refreshAll() {
-    await refreshTasks();
-    await refreshAnalytics();
+    await Promise.all([refreshTasks(), refreshAnalytics()]);
 }
 
 async function onRegister(event) {
@@ -380,11 +383,12 @@ function setupVoiceRecognition() {
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
         state.isListening = true;
+        state.manualStopRequested = false;
         updateMicControls();
         setStatus(elements.voiceStatus, "Listening... speak now.");
     };
@@ -431,29 +435,61 @@ function setupVoiceRecognition() {
 
     recognition.onend = () => {
         state.isListening = false;
+        if (!state.manualStopRequested && state.shouldKeepListening) {
+            setStatus(elements.voiceStatus, "Pause detected. Resuming microphone...");
+            state.resumeTimer = window.setTimeout(() => {
+                try {
+                    recognition.start();
+                } catch {
+                    state.shouldKeepListening = false;
+                    updateMicControls();
+                    setStatus(elements.voiceStatus, "Microphone stopped.");
+                }
+            }, 900);
+            updateMicControls();
+            return;
+        }
+
+        state.shouldKeepListening = false;
         updateMicControls();
         setStatus(elements.voiceStatus, "Microphone stopped.");
     };
 
     startButton.addEventListener("click", () => {
-        if (state.isListening) return;
+        if (state.isListening || state.shouldKeepListening) return;
 
-        state.finalTranscript = "";
-        elements.voiceInput.value = "";
+        if (state.resumeTimer) {
+            window.clearTimeout(state.resumeTimer);
+            state.resumeTimer = null;
+        }
+        state.shouldKeepListening = true;
+        state.manualStopRequested = false;
+        state.finalTranscript = elements.voiceInput.value.trim();
+        updateMicControls();
 
         try {
             recognition.start();
         } catch (error) {
+            state.shouldKeepListening = false;
+            updateMicControls();
             const message = error && error.message ? error.message : "Microphone is busy. Try again.";
             setStatus(elements.voiceStatus, message, "error");
         }
     });
 
     stopButton.addEventListener("click", () => {
+        state.shouldKeepListening = false;
+        state.manualStopRequested = true;
+        if (state.resumeTimer) {
+            window.clearTimeout(state.resumeTimer);
+            state.resumeTimer = null;
+        }
+
         if (state.isListening) {
             recognition.stop();
             return;
         }
+        updateMicControls();
         setStatus(elements.voiceStatus, "Microphone is already stopped.");
     });
 
