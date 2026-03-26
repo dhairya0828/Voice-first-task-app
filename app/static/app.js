@@ -3,9 +3,9 @@ const state = {
     currentUser: null,
     recognition: null,
     isListening: false,
-    shouldKeepListening: false,
     manualStopRequested: false,
-    resumeTimer: null,
+    autoStopTriggered: false,
+    silenceTimer: null,
     finalTranscript: "",
 };
 
@@ -27,6 +27,7 @@ const API_BASE_URL = (() => {
     const raw = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || "";
     return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 })();
+const SILENCE_AUTO_STOP_MS = 4000;
 
 function setStatus(node, message, type = "") {
     node.textContent = message || "";
@@ -35,10 +36,9 @@ function setStatus(node, message, type = "") {
 
 function updateMicControls() {
     if (!elements.startMicBtn || !elements.stopMicBtn) return;
-    const active = state.isListening || state.shouldKeepListening;
-    elements.startMicBtn.disabled = active;
-    elements.stopMicBtn.disabled = !active;
-    elements.startMicBtn.setAttribute("aria-pressed", active ? "true" : "false");
+    elements.startMicBtn.disabled = state.isListening;
+    elements.stopMicBtn.disabled = !state.isListening;
+    elements.startMicBtn.setAttribute("aria-pressed", state.isListening ? "true" : "false");
 }
 
 async function api(path, { method = "GET", body = null, form = false } = {}) {
@@ -386,9 +386,33 @@ function setupVoiceRecognition() {
     recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
+    const clearSilenceTimer = () => {
+        if (state.silenceTimer) {
+            window.clearTimeout(state.silenceTimer);
+            state.silenceTimer = null;
+        }
+    };
+
+    const scheduleSilenceStop = () => {
+        clearSilenceTimer();
+        state.silenceTimer = window.setTimeout(() => {
+            if (!state.isListening || !state.recognition) return;
+            state.autoStopTriggered = true;
+            state.manualStopRequested = false;
+            try {
+                state.recognition.stop();
+            } catch {
+                state.isListening = false;
+                updateMicControls();
+            }
+        }, SILENCE_AUTO_STOP_MS);
+    };
+
     recognition.onstart = () => {
         state.isListening = true;
         state.manualStopRequested = false;
+        state.autoStopTriggered = false;
+        scheduleSilenceStop();
         updateMicControls();
         setStatus(elements.voiceStatus, "Listening... speak now.");
     };
@@ -410,6 +434,7 @@ function setupVoiceRecognition() {
 
         const combined = `${state.finalTranscript} ${interimTranscript}`.trim();
         elements.voiceInput.value = combined;
+        scheduleSilenceStop();
     };
 
     recognition.onerror = (event) => {
@@ -434,43 +459,30 @@ function setupVoiceRecognition() {
     };
 
     recognition.onend = () => {
+        clearSilenceTimer();
         state.isListening = false;
-        if (!state.manualStopRequested && state.shouldKeepListening) {
-            setStatus(elements.voiceStatus, "Pause detected. Resuming microphone...");
-            state.resumeTimer = window.setTimeout(() => {
-                try {
-                    recognition.start();
-                } catch {
-                    state.shouldKeepListening = false;
-                    updateMicControls();
-                    setStatus(elements.voiceStatus, "Microphone stopped.");
-                }
-            }, 900);
-            updateMicControls();
-            return;
-        }
-
-        state.shouldKeepListening = false;
         updateMicControls();
-        setStatus(elements.voiceStatus, "Microphone stopped.");
+        if (state.autoStopTriggered) {
+            setStatus(elements.voiceStatus, "Microphone auto-stopped after 5 seconds of silence.");
+        } else {
+            setStatus(elements.voiceStatus, "Microphone stopped.");
+        }
+        state.autoStopTriggered = false;
+        state.manualStopRequested = false;
     };
 
     startButton.addEventListener("click", () => {
-        if (state.isListening || state.shouldKeepListening) return;
+        if (state.isListening) return;
 
-        if (state.resumeTimer) {
-            window.clearTimeout(state.resumeTimer);
-            state.resumeTimer = null;
-        }
-        state.shouldKeepListening = true;
+        clearSilenceTimer();
         state.manualStopRequested = false;
+        state.autoStopTriggered = false;
         state.finalTranscript = elements.voiceInput.value.trim();
         updateMicControls();
 
         try {
             recognition.start();
         } catch (error) {
-            state.shouldKeepListening = false;
             updateMicControls();
             const message = error && error.message ? error.message : "Microphone is busy. Try again.";
             setStatus(elements.voiceStatus, message, "error");
@@ -478,12 +490,9 @@ function setupVoiceRecognition() {
     });
 
     stopButton.addEventListener("click", () => {
-        state.shouldKeepListening = false;
+        clearSilenceTimer();
         state.manualStopRequested = true;
-        if (state.resumeTimer) {
-            window.clearTimeout(state.resumeTimer);
-            state.resumeTimer = null;
-        }
+        state.autoStopTriggered = false;
 
         if (state.isListening) {
             recognition.stop();
@@ -525,6 +534,21 @@ async function onExecute() {
     }
 
     try {
+        if (state.isListening && state.recognition) {
+            state.manualStopRequested = true;
+            state.autoStopTriggered = false;
+            if (state.silenceTimer) {
+                window.clearTimeout(state.silenceTimer);
+                state.silenceTimer = null;
+            }
+            try {
+                state.recognition.stop();
+            } catch {
+                state.isListening = false;
+                updateMicControls();
+            }
+        }
+
         let result = await api("/api/voice/execute", { method: "POST", body: { text, force: false } });
 
         if (result.requires_confirmation) {
@@ -541,6 +565,8 @@ async function onExecute() {
 
         elements.interpretationOutput.textContent = JSON.stringify(result.interpretation, null, 2);
         setStatus(elements.voiceStatus, result.message, "success");
+        elements.voiceInput.value = "";
+        state.finalTranscript = "";
         await refreshAll();
     } catch (error) {
         setStatus(elements.voiceStatus, error.message, "error");
