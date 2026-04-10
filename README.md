@@ -55,65 +55,52 @@ Open: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 PYTHONPATH=. pytest
 ```
 
-## Deployment (Public) - Netlify + Render + Neon
+## Deployment (Public) - Render Only
 
-Use this architecture:
+Current recommended setup for this repo:
 
-- Netlify: frontend hosting
-- Render: FastAPI backend hosting
-- Neon: free hosted Postgres
+- Render hosts both frontend and backend from the same FastAPI service
+- Supabase/Neon hosts Postgres
 
-### Step A: Create free Postgres (Neon)
+### Step A: Prepare database
 
-1. Create a Neon project and database.
-2. Copy connection string.
-3. Convert it to SQLAlchemy `psycopg` format:
+Create Postgres on Supabase or Neon and use a SQLAlchemy URL:
 
 ```text
 postgresql+psycopg://USER:PASSWORD@HOST/DBNAME?sslmode=require
 ```
 
-### Step B: Deploy backend (Render)
+Use pooler/session endpoints if direct endpoint connectivity fails from your host.
 
-1. Create a new **Web Service** from this repo.
-2. Configure:
+### Step B: Deploy service on Render
+
+1. Create a new Web Service from this repo.
+2. Configure build/start:
    - Build command: `pip install -r requirements.txt`
    - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-3. Add environment variables:
+3. Set environment variables:
    - `APP_NAME=Voice-First Task App`
    - `SECRET_KEY=<strong-random-value>`
    - `ACCESS_TOKEN_EXPIRE_MINUTES=120`
-   - `DATABASE_URL=<your-postgresql+psycopg URL>`
-   - `CORS_ORIGINS=https://<your-netlify-site>.netlify.app`
-   - `SERVE_FRONTEND=false` (use Netlify as UI)
-4. Deploy and confirm health:
-   - `https://<your-render-service>.onrender.com/health`
+   - `DATABASE_URL=<your-postgresql+psycopg-url>`
+   - `CORS_ORIGINS=https://<your-render-service>.onrender.com`
+   - `SERVE_FRONTEND=true`
+   - `PYTHON_VERSION=3.12.8`
+4. Optional but recommended:
+   - Health check path: `/health`
 
-### Step C: Deploy frontend (Netlify)
+### Step C: Smoke test
 
-This repo includes:
-
-- `netlify.toml` (build + publish settings)
-- `scripts/build_netlify.sh` (generates static site into `netlify_site/`)
-
-In Netlify:
-
-1. Import the GitHub repo.
-2. Set environment variable:
-   - `NETLIFY_API_BASE_URL=https://<your-render-service>.onrender.com`
-3. Deploy (Netlify reads `netlify.toml` automatically).
-
-Optional:
-
-- `NETLIFY_APP_NAME=Voice-First Task App`
-
-### Step D: Smoke test deployed app
-
-1. Open Netlify URL.
+1. Open `https://<your-render-service>.onrender.com`.
 2. Register and login.
-3. Create task by voice command.
-4. Execute complete/cancel/delay.
-5. Verify dashboard updates.
+3. Create and complete tasks by voice.
+4. Verify analytics updates.
+
+### Step D: Reduce cold-start impact
+
+On Render free tier, idle instances can sleep. Keep a monitor (for example UptimeRobot) pinging:
+
+`https://<your-render-service>.onrender.com/health`
 
 ## Environment Variables
 
@@ -130,11 +117,11 @@ SERVE_FRONTEND=true
 
 Production recommendation:
 
-- Set specific CORS origins (Netlify domain), not `*`.
+- Set specific CORS origins (your deployed frontend domain), not `*`.
 
 ## Useful Notes
 
 - Due dates are stored in UTC.
 - If mic is unavailable, typed command input still works.
-- Frontend API base URL is configurable via `window.APP_CONFIG.API_BASE_URL`.
-- `SERVE_FRONTEND=false` disables the embedded frontend on Render root (`/`) and keeps API endpoints active.
+- `SERVE_FRONTEND=true` serves frontend and backend from the same Render service.
+- Docker + Oracle deployment assets remain in `deployment/oracle/` for future infra branches.
