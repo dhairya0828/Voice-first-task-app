@@ -5,5 +5,5 @@ __pycache__/
 .env
 voice_tasks.db
 *.sqlite3
-netlify_site/
+*_site/
 .DS_Store
