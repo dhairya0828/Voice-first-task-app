@@ -3,6 +3,7 @@ const state = {
     currentUser: null,
     recognition: null,
     isListening: false,
+    suppressRecognitionUpdates: false,
     manualStopRequested: false,
     autoStopTriggered: false,
     silenceTimer: null,
@@ -27,7 +28,8 @@ const API_BASE_URL = (() => {
     const raw = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || "";
     return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 })();
-const SILENCE_AUTO_STOP_MS = 4000;
+const SILENCE_AUTO_STOP_MS = 2000;
+const SILENCE_AUTO_STOP_SECONDS = SILENCE_AUTO_STOP_MS / 1000;
 
 function setStatus(node, message, type = "") {
     node.textContent = message || "";
@@ -39,6 +41,48 @@ function updateMicControls() {
     elements.startMicBtn.disabled = state.isListening;
     elements.stopMicBtn.disabled = !state.isListening;
     elements.startMicBtn.setAttribute("aria-pressed", state.isListening ? "true" : "false");
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function stopMicCaptureIfActive() {
+    if (!state.recognition || !state.isListening) {
+        return;
+    }
+
+    state.manualStopRequested = true;
+    state.autoStopTriggered = false;
+    if (state.silenceTimer) {
+        window.clearTimeout(state.silenceTimer);
+        state.silenceTimer = null;
+    }
+
+    try {
+        state.recognition.stop();
+    } catch {
+        state.isListening = false;
+        updateMicControls();
+        return;
+    }
+
+    const waitUntil = Date.now() + 2500;
+    while (state.isListening && Date.now() < waitUntil) {
+        await sleep(50);
+    }
+
+    if (state.isListening) {
+        try {
+            state.recognition.abort();
+        } catch {}
+        await sleep(60);
+    }
+
+    if (state.isListening) {
+        state.isListening = false;
+        updateMicControls();
+    }
 }
 
 async function api(path, { method = "GET", body = null, form = false } = {}) {
@@ -418,6 +462,10 @@ function setupVoiceRecognition() {
     };
 
     recognition.onresult = (event) => {
+        if (state.suppressRecognitionUpdates) {
+            return;
+        }
+
         let interimTranscript = "";
 
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
@@ -463,7 +511,7 @@ function setupVoiceRecognition() {
         state.isListening = false;
         updateMicControls();
         if (state.autoStopTriggered) {
-            setStatus(elements.voiceStatus, "Microphone auto-stopped after 5 seconds of silence.");
+            setStatus(elements.voiceStatus, `Microphone auto-stopped after ${SILENCE_AUTO_STOP_SECONDS} seconds of silence.`);
         } else {
             setStatus(elements.voiceStatus, "Microphone stopped.");
         }
@@ -475,6 +523,7 @@ function setupVoiceRecognition() {
         if (state.isListening) return;
 
         clearSilenceTimer();
+        state.suppressRecognitionUpdates = false;
         state.manualStopRequested = false;
         state.autoStopTriggered = false;
         state.finalTranscript = elements.voiceInput.value.trim();
@@ -534,20 +583,8 @@ async function onExecute() {
     }
 
     try {
-        if (state.isListening && state.recognition) {
-            state.manualStopRequested = true;
-            state.autoStopTriggered = false;
-            if (state.silenceTimer) {
-                window.clearTimeout(state.silenceTimer);
-                state.silenceTimer = null;
-            }
-            try {
-                state.recognition.stop();
-            } catch {
-                state.isListening = false;
-                updateMicControls();
-            }
-        }
+        state.suppressRecognitionUpdates = true;
+        await stopMicCaptureIfActive();
 
         let result = await api("/api/voice/execute", { method: "POST", body: { text, force: false } });
 
@@ -570,6 +607,10 @@ async function onExecute() {
         await refreshAll();
     } catch (error) {
         setStatus(elements.voiceStatus, error.message, "error");
+    } finally {
+        window.setTimeout(() => {
+            state.suppressRecognitionUpdates = false;
+        }, 150);
     }
 }
 
